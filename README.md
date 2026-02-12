@@ -76,9 +76,7 @@ http://localhost:5173
 
 - 使用 MediaPipe Hands 识别双手食指指尖坐标。
 - 通过“距离 + 相对速度 + 连续帧稳定性”判断摩擦点火。
-- 粒子系统使用重力与阻力更新，产生拖尾与坠落感：
-  - 重力：$v_y \leftarrow v_y + g\,dt$
-  - 阻力：$v \leftarrow v\cdot e^{-k\,dt}$
+- 粒子系统使用重力与阻力更新
 
 ### B. 资源预加载
 
