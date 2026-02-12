@@ -1,113 +1,137 @@
-# Happy New Year 手势烟花 + 回忆页面
+# Happy New Year 手势烟花 + 回忆页面 ✨
 
-两个食指相触触发烟花特效，配合时间轴形式的回忆展示页面。
+一个“互动烟花 + 浪漫回忆”的静态前端项目 (๑˃̵ᴗ˂̵)ﻭ
 
 ---
 
-## 本地运行
+## 1) 快速启动
 
-本项目依赖 fetch 读取本地 JSON 文件，请勿直接双击 index.html 打开（file:// 协议下无法工作）。
+> 请使用本地 HTTP 服务启动，不能直接双击 `index.html`（`file://` 下无法读取 JSON）。
 
-建议通过本地 HTTP 服务器运行：
+### Python
 
-# Python
+```bash
 python3 -m http.server 5173
+```
 
-# Node
+### Node
+
+```bash
 npx serve . -l 5173
+```
 
-访问 http://localhost:5173
+浏览器访问：
+
+```text
+http://localhost:5173
+```
 
 ---
 
-## 内容配置
-
-所有可编辑内容集中在两个 JSON 文件中，无需修改 JavaScript 代码。
+## 2) 只改 JSON 即可维护内容
 
 ### 回忆页配置：assets/memories.json
 
 | 字段 | 说明 |
-|------|------|
+| ------ | ------ |
 | page.heroTitle | 回忆页主标题 |
-| page.heroSubtitle | 副标题 |
-| bgm | 烟花阶段背景音乐 |
-| memoryBgm | 进入回忆页后的背景音乐 |
-| backgroundVideo | 回忆页剪影背景视频 |
+| page.heroSubtitle | 顶部副标题 |
+| bgm | 烟花阶段 BGM |
+| memoryBgm | 进入回忆页后的 BGM |
+| enableBackgroundVideo | 是否启用背景视频（true/false） |
+| backgroundVideo | 背景视频路径 |
 | chapters | 时间轴章节数组 |
 
-chapters 结构示例：
+章节结构（示例）：
 
+```json
 {
-  "time": "2023 夏",
+  "time": "记忆 · 01",
   "title": "一起去海边",
-  "text": "那几天没涂防晒，你后背晒红了",
+  "text": "那天下午的风很温柔。",
   "items": [
     {
       "type": "image",
-      "src": "./assets/memories/beach.jpg",
-      "title": "傍晚拍的",
-      "desc": "你说这张像电影截图"
+      "src": "./assets/memories/01.jpg",
+      "title": "海边",
+      "desc": "你笑得很好看"
     }
   ]
 }
-
-items 支持 type: image / video。
-
-参考文件：assets/memories_sample.json
+```
 
 ### 信件配置：assets/letter.json
 
 | 字段 | 说明 |
-|------|------|
+| ------ | ------ |
 | title | 信件标题 |
 | paragraphs | 正文段落数组 |
 | buttonText | 按钮文案 |
 
-参考文件：assets/letter_sample.json
+---
+
+## 3) 主要技术原理与实现
+
+### A. 手势识别与烟花互动
+
+- 使用 MediaPipe Hands 识别双手食指指尖坐标。
+- 通过“距离 + 相对速度 + 连续帧稳定性”判断摩擦点火。
+- 粒子系统使用重力与阻力更新，产生拖尾与坠落感：
+  - 重力：$v_y \leftarrow v_y + g\,dt$
+  - 阻力：$v \leftarrow v\cdot e^{-k\,dt}$
+
+### B. 资源预加载
+
+- 首屏先读取 JSON，再预加载图片/视频/BGM。
+- 使用进度条显示加载百分比，加载完成后才允许开启摄像头。
+
+### C. 回忆页时间轴与动效
+
+- 时间轴章节按 JSON 动态渲染。
+- 顶部标题和 BGM 按钮固定在最上方。
+- 卡片与章节入场动画使用轻量 transform/opacity，避免重滤镜卡顿。
+- 飘动爱心使用定时器持续生成，营造浪漫氛围 (♡˙︶˙♡)
+
+### D. 性能优化点
+
+- 图片使用 `loading="lazy"` + `decoding="async"`。
+- 章节使用 `content-visibility` 降低长列表渲染成本。
+- 点击信件后关闭摄像头并释放烟花页面资源，减少内存和 GPU 压力。
 
 ---
 
-## 资源路径说明
+## 4) 交互流程
 
-建议按以下目录存放资源文件：
-
-- 音频文件：assets/
-- 图片/视频：assets/memories/
-
-JSON 中填写相对路径：
-
-./assets/bgm.mp3
-./assets/memories/photo-1.jpg
+1. 进入页面后先预加载资源（显示进度）
+2. 点击开启摄像头
+3. 双食指互动点燃烟花，点亮 `2026` 格子
+4. 展示信件
+5. 点击“收下这封信”进入回忆页并切换 BGM
+6. 滑到页面底部触发小彩蛋 🎁
 
 ---
 
-## 交互流程
+## 5) 项目结构
 
-1. 资源预加载（进度条）
-2. 用户授权摄像头
-3. 检测到双食指同时伸出 → 烟花特效 → 2026 格子逐一亮起
-4. 烟花结束 → 展示信件
-5. 点击“收下这封信” → 切换 BGM → 进入回忆页（时间轴视图）
-
----
-
-## 目录结构
-
+```text
 .
 ├── index.html
 ├── style.css
 ├── main.js
-├── assets/
-│   ├── memories.json      # 回忆页配置
-│   ├── letter.json        # 信件配置
-│   ├── bgm.mp3
-│   ├── bgm-memory.mp3
-│   └── memories/          # 照片、视频素材
+└── assets/
+    ├── memories.json
+    ├── letter.json
+    ├── bgm.mp3
+    ├── bgm-memory.mp3
+    └── memories/
+```
 
 ---
 
-## 维护说明
+## 6) 常见问题
 
-本项目中 main.js 为核心逻辑文件，不建议直接修改。内容维护仅需编辑 assets/ 目录下的两个 JSON 文件，按格式填充即可。
+- 摄像头打不开：请确认使用 `localhost`，并授予浏览器摄像头权限。
+- 图片不显示：检查文件名和路径（大小写要一致）。
+- 滚动卡顿：优先压缩超大分辨率图片，建议单图宽度控制在 2000px 内。
 
-图片、视频素材请统一存放于 assets/memories/ 目录，路径填写时注意以 ./ 开头。
+祝你们的回忆页越做越浪漫 ✨(｡•̀ᴗ-)✧

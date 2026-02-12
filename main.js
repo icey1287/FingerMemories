@@ -19,7 +19,6 @@ const artTitle = document.getElementById('artTitle');
 const artSubtitle = document.getElementById('artSubtitle');
 const timelineRoot = document.getElementById('timelineRoot');
 const bgmControlBtn = document.getElementById('bgmControlBtn');
-const reloadMemoriesBtn = document.getElementById('reloadMemoriesBtn');
 const floatingDecor = document.getElementById('floatingDecor');
 const mediaLightbox = document.getElementById('mediaLightbox');
 const closeLightboxBtn = document.getElementById('closeLightboxBtn');
@@ -81,6 +80,9 @@ let memoryConfig = null;
 let letterConfig = null;
 let chapterObserver = null;
 let activeBgmSrc = '';
+let memoryHeartTimer = null;
+let easterObserver = null;
+let memoryScrollHandler = null;
 
 function clamp(v, min, max) {
   return Math.max(min, Math.min(max, v));
@@ -329,6 +331,15 @@ function emitBrushSpark(x, y) {
   }
 }
 
+function emitTouchFireByTips(baseIntensity = 0.35) {
+  if (state.tips.length < 2) return;
+  const [a, b] = state.tips;
+  const d = Math.hypot(b.x - a.x, b.y - a.y);
+  if (d > 112) return;
+  const intensity = clamp((1 - d / 112) * baseIntensity + 0.2, 0.2, 0.95);
+  emitFrictionSparks(a, b, intensity);
+}
+
 function launchBurst(x, y, scale = 1) {
   const count = Math.floor(rand(36, 74) * scale);
   for (let i = 0; i < count; i += 1) {
@@ -409,46 +420,14 @@ function createGuide2026Grid() {
 function defaultMemories() {
   return {
     page: {
-      heroTitle: '与你有关的浪漫，都在这里闪光',
-      heroSubtitle: '记录我们一路走来的点点滴滴 · Love Story',
+      heroTitle: '',
+      heroSubtitle: '',
     },
     bgm: './assets/bgm.mp3',
     memoryBgm: './assets/bgm-memory.mp3',
-    backgroundVideo: './assets/memories/video-bg.mp4',
-    chapters: [
-      {
-        time: '初遇 · 2023',
-        title: '第一次心动，是你笑起来的时候',
-        text: '那些看似平常的瞬间，后来都成了我反复珍藏的画面。',
-        items: [
-          {
-            type: 'image',
-            src: './assets/memories/photo-1.jpg',
-            title: '第一次一起散步的傍晚',
-            desc: '替换成你们的照片',
-          },
-        ],
-      },
-      {
-        time: '靠近 · 2024',
-        title: '日常里，慢慢长出浪漫',
-        text: '一句晚安、一次拥抱、一段并肩前行，都是生活里最温柔的注脚。',
-        items: [
-          {
-            type: 'video',
-            src: './assets/memories/video-1.mp4',
-            title: '想反复回看的小片段',
-            desc: '替换成你们的视频',
-          },
-          {
-            type: 'image',
-            src: './assets/memories/photo-2.jpg',
-            title: '普通日子里的发光瞬间',
-            desc: '继续添加更多回忆',
-          },
-        ],
-      },
-    ],
+    enableBackgroundVideo: false,
+    backgroundVideo: '',
+    chapters: [],
   };
 }
 
@@ -465,6 +444,7 @@ function normalizeMemoriesConfig(raw) {
       },
       bgm: source.bgm || fallback.bgm,
       memoryBgm: source.memoryBgm || source.bgm || fallback.memoryBgm,
+      enableBackgroundVideo: source.enableBackgroundVideo === true,
       backgroundVideo: source.backgroundVideo || fallback.backgroundVideo,
       chapters: [
         {
@@ -494,6 +474,7 @@ function normalizeMemoriesConfig(raw) {
     },
     bgm: source.bgm || fallback.bgm,
     memoryBgm: source.memoryBgm || source.bgm || fallback.memoryBgm,
+    enableBackgroundVideo: source.enableBackgroundVideo === true,
     backgroundVideo: source.backgroundVideo || fallback.backgroundVideo,
     chapters,
   };
@@ -537,7 +518,9 @@ async function preloadInitialResources() {
 
   addEntry(getFireworkBgmUrl(), 'audio');
   addEntry(getMemoryBgmUrl(), 'audio');
-  addEntry(memoryConfig?.backgroundVideo, 'video');
+  if (memoryConfig?.enableBackgroundVideo) {
+    addEntry(memoryConfig?.backgroundVideo, 'video');
+  }
   for (const chapter of memoriesData) {
     for (const item of chapter.items || []) {
       addEntry(item.src, item.type === 'video' ? 'video' : 'image');
@@ -564,9 +547,17 @@ async function preloadInitialResources() {
 }
 
 function setupMemoryBackgroundVideo() {
+  if (!memoryConfig?.enableBackgroundVideo) {
+    memoryPage.classList.remove('with-bg-video');
+    memoryBgVideo.pause();
+    memoryBgVideo.removeAttribute('src');
+    return;
+  }
+
   const bgVideo = memoryConfig?.backgroundVideo;
   if (!bgVideo) {
     memoryPage.classList.remove('with-bg-video');
+    memoryBgVideo.pause();
     memoryBgVideo.removeAttribute('src');
     return;
   }
@@ -618,14 +609,6 @@ function setupChapterObserver() {
         const idx = Number(entry.target.dataset.index || 0);
         if (idx !== activeIndex) {
           activeIndex = idx;
-          const camX = ((idx % 3) - 1) * -8;
-          const camY = (idx % 2 === 0 ? 1 : -1) * 4;
-          memoryPage.style.setProperty('--cam-x', `${camX}px`);
-          memoryPage.style.setProperty('--cam-y', `${camY}px`);
-          memoryPage.style.setProperty('--cam-scale', '1.015');
-          setTimeout(() => {
-            memoryPage.style.setProperty('--cam-scale', '1');
-          }, 420);
           triggerCinematicCut();
           playTone(560 + idx * 55, 0.08, 'triangle', 0.03);
         }
@@ -680,6 +663,8 @@ function renderMemories() {
         img.src = item.src;
         img.alt = item.title || 'memory';
         img.loading = 'lazy';
+        img.decoding = 'async';
+        img.fetchPriority = 'low';
         mediaCard.appendChild(img);
       }
 
@@ -702,6 +687,30 @@ function renderMemories() {
     wrap.appendChild(card);
     timelineRoot.appendChild(wrap);
   });
+
+  const easter = document.createElement('section');
+  easter.className = 'memory-easter';
+  easter.id = 'memoryEaster';
+  easter.innerHTML = `
+    <div class="memory-easter-inner">
+      <h3>💖 小彩蛋</h3>
+      <p>你已经翻到了故事的最后一页，但我们的故事还会一直写下去 (｡•ᴗ-)_旦~</p>
+      <button id="easterBtn" type="button">点我放飞爱心雨</button>
+    </div>
+  `;
+  timelineRoot.appendChild(easter);
+
+  const easterBtn = document.getElementById('easterBtn');
+  if (easterBtn) {
+    easterBtn.addEventListener('click', () => {
+      for (let i = 0; i < 66; i += 1) {
+        setTimeout(() => spawnFloatingHeart(true), i * 35);
+      }
+      playCheerSound();
+    });
+  }
+
+  setupEasterObserver();
 }
 
 function openLightbox(item) {
@@ -729,15 +738,62 @@ function closeLightbox() {
   lightboxContent.innerHTML = '';
 }
 
-function spawnFloatingHeart() {
+function spawnFloatingHeart(isBurst = false) {
   const el = document.createElement('span');
   el.className = 'floating-heart';
-  el.textContent = Math.random() > 0.5 ? '❤' : '✦';
+  const symbols = ['❤', '♡', '✦', '❣', '💗'];
+  el.textContent = symbols[Math.floor(Math.random() * symbols.length)];
   el.style.left = `${rand(3, 97)}vw`;
-  el.style.bottom = `${rand(-8, 12)}vh`;
-  el.style.animationDuration = `${rand(6, 12)}s`;
+  el.style.bottom = `${isBurst ? rand(-2, 20) : rand(-8, 12)}vh`;
+  el.style.animationDuration = `${isBurst ? rand(5, 8) : rand(7, 13)}s`;
+  el.style.opacity = `${isBurst ? rand(0.65, 0.95) : rand(0.45, 0.8)}`;
   floatingDecor.appendChild(el);
   setTimeout(() => el.remove(), 12000);
+}
+
+function setupEasterObserver() {
+  if (easterObserver) easterObserver.disconnect();
+  const target = document.getElementById('memoryEaster');
+  if (!target) return;
+
+  easterObserver = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        target.classList.add('show');
+        playTone(980, 0.1, 'triangle', 0.04);
+      }
+    },
+    { root: memoryPage, threshold: 0.12, rootMargin: '0px 0px -8% 0px' }
+  );
+
+  easterObserver.observe(target);
+
+  if (memoryScrollHandler) {
+    memoryPage.removeEventListener('scroll', memoryScrollHandler);
+  }
+
+  memoryScrollHandler = () => {
+    const nearBottom =
+      memoryPage.scrollTop + memoryPage.clientHeight >=
+      memoryPage.scrollHeight - 32;
+    if (nearBottom) {
+      target.classList.add('show');
+    }
+  };
+
+  memoryPage.addEventListener('scroll', memoryScrollHandler, { passive: true });
+}
+
+function startMemoryAmbientEffects() {
+  if (memoryHeartTimer) clearInterval(memoryHeartTimer);
+  for (let i = 0; i < 12; i += 1) {
+    setTimeout(() => spawnFloatingHeart(false), i * 120);
+  }
+  memoryHeartTimer = setInterval(() => {
+    if (state.stage !== stages.MEMORY) return;
+    spawnFloatingHeart(false);
+  }, 260);
 }
 
 async function enterMemoryPage() {
@@ -782,6 +838,8 @@ async function enterMemoryPage() {
   await loadMemories();
   memoryPage.classList.add('show');
   memoryPage.setAttribute('aria-hidden', 'false');
+  memoryPage.scrollTop = 0;
+  startMemoryAmbientEffects();
   setBgmSourceIfNeeded(getMemoryBgmUrl());
   setBgmVolume(0.42);
   await playBgm();
@@ -921,6 +979,8 @@ function updateDrawStage() {
   const distance = Math.hypot(b.x - a.x, b.y - a.y);
   if (distance > 130) return;
 
+  emitTouchFireByTips(0.42);
+
   const midX = (a.x + b.x) * 0.5;
   const midY = (a.y + b.y) * 0.5;
   state.drawTrail.push({ x: midX, y: midY });
@@ -955,6 +1015,8 @@ function updateFireworksStage(dt) {
     launchBurst(rand(70, window.innerWidth - 70), rand(50, window.innerHeight * 0.58), rand(0.9, 1.45));
     if (Math.random() < 0.35) playBoomSound();
   }
+
+  emitTouchFireByTips(0.34);
 
   if (state.fireworksTimer > 6.4) {
     playCompleteSound();
@@ -1243,12 +1305,6 @@ bgmControlBtn.addEventListener('click', async () => {
     stopBgm();
   }
 });
-
-if (reloadMemoriesBtn) {
-  reloadMemoriesBtn.addEventListener('click', () => {
-    loadMemories();
-  });
-}
 
 closeLightboxBtn.addEventListener('click', closeLightbox);
 mediaLightbox.addEventListener('click', (e) => {

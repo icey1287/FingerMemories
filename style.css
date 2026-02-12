@@ -210,11 +210,27 @@ body {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.55s ease;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   background:
     radial-gradient(circle at 15% 20%, rgba(245, 140, 188, 0.2), transparent 44%),
     radial-gradient(circle at 88% 28%, rgba(145, 188, 255, 0.22), transparent 45%),
     linear-gradient(145deg, #150d2c 0%, #29153e 38%, #3c1645 70%, #2d1338 100%);
+  isolation: isolate;
+}
+
+.memory-page::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 22% 26%, rgba(255, 169, 218, 0.14), transparent 28%),
+    radial-gradient(circle at 78% 34%, rgba(255, 211, 166, 0.12), transparent 32%),
+    radial-gradient(circle at 52% 80%, rgba(196, 176, 255, 0.1), transparent 34%);
+  animation: memoryGlowShift 10s ease-in-out infinite;
+  z-index: 1;
 }
 
 .memory-bg-video {
@@ -249,21 +265,26 @@ body {
 
 .memory-inner {
   position: relative;
-  z-index: 2;
+  z-index: 4;
   width: min(1120px, 94vw);
   margin: 0 auto;
-  padding: clamp(24px, 4vw, 44px) 0 60px;
-  transform: translate3d(var(--cam-x, 0), var(--cam-y, 0), 0) scale(var(--cam-scale, 1));
-  transition: transform 0.7s cubic-bezier(0.2, 0.72, 0.22, 1);
+  padding: clamp(14px, 2.8vw, 24px) 0 84px;
 }
 
 .memory-hero {
-  position: sticky;
-  top: 0;
-  padding: 14px 8px 12px;
-  backdrop-filter: blur(8px);
-  background: linear-gradient(180deg, rgba(18, 8, 36, 0.72), rgba(18, 8, 36, 0.2));
-  z-index: 3;
+  position: relative;
+  width: 100%;
+  margin: 0 0 10px;
+  padding: 14px 10px 12px;
+  background: linear-gradient(180deg, rgba(18, 8, 36, 0.6), rgba(18, 8, 36, 0.2));
+  border-bottom: 1px solid rgba(255, 199, 231, 0.18);
+  z-index: 12;
+  border-radius: 0 0 14px 14px;
+}
+
+.memory-hero > * {
+  position: relative;
+  z-index: 2;
 }
 
 .art-title {
@@ -272,25 +293,20 @@ body {
   font-size: clamp(28px, 4.2vw, 56px);
   letter-spacing: 0.08em;
   font-weight: 800;
-  background: linear-gradient(120deg, #ffe8f4 0%, #ffcde6 30%, #ffd9a6 58%, #fff3cf 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  text-shadow: 0 10px 36px rgba(255, 160, 219, 0.24);
+  color: #fff0f7;
+  text-shadow: 0 4px 12px rgba(255, 100, 160, 0.45), 0 0 25px rgba(255, 180, 220, 0.25);
 }
 
 .art-title .char {
   display: inline-block;
   opacity: 0;
   transform: translateY(20px) scale(0.95);
-  filter: blur(4px);
-  transition: transform 0.55s ease, opacity 0.55s ease, filter 0.55s ease;
+  transition: transform 0.55s ease, opacity 0.55s ease;
 }
 
 .art-title.reveal .char {
   opacity: 1;
   transform: translateY(0) scale(1);
-  filter: blur(0);
 }
 
 .art-subtitle {
@@ -330,7 +346,7 @@ body {
 }
 
 .timeline-root {
-  margin-top: 18px;
+  margin-top: 4px;
   padding-bottom: 24px;
   position: relative;
 }
@@ -350,15 +366,15 @@ body {
   margin: 16px 0 34px;
   padding-left: clamp(30px, 8vw, 74px);
   opacity: 0;
-  transform: translateY(42px) scale(0.94);
-  filter: blur(6px);
-  transition: transform 0.7s cubic-bezier(0.2, 0.72, 0.22, 1), opacity 0.7s ease, filter 0.7s ease;
+  transform: translateY(32px) scale(0.97);
+  transition: transform 0.45s ease, opacity 0.45s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: 500px;
 }
 
 .timeline-chapter.in-view {
   opacity: 1;
   transform: translateY(0) scale(1);
-  filter: blur(0);
 }
 
 .timeline-dot {
@@ -376,8 +392,20 @@ body {
   border-radius: 20px;
   padding: 16px;
   background: linear-gradient(160deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  position: relative;
+  overflow: hidden;
   border: 1px solid rgba(255, 211, 241, 0.35);
   box-shadow: 0 20px 44px rgba(0, 0, 0, 0.24);
+}
+
+.chapter-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(255, 185, 225, 0.12), transparent 45%, rgba(255, 220, 160, 0.18));
+  opacity: 0.6;
+  animation: gradientSweep 8s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .chapter-head {
@@ -425,6 +453,18 @@ body {
   box-shadow: 0 16px 32px rgba(0, 0, 0, 0.24);
   transform: translateY(0);
   transition: transform 0.25s ease, box-shadow 0.25s ease;
+  contain: layout paint;
+}
+
+.memory-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(130deg, rgba(255, 208, 234, 0.18), transparent 50%, rgba(255, 240, 200, 0.22));
+  opacity: 0.7;
+  mix-blend-mode: screen;
+  animation: gradientSweep 6.5s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .memory-card:hover {
@@ -438,6 +478,8 @@ body {
   height: 100%;
   object-fit: cover;
   display: block;
+  aspect-ratio: 4 / 5;
+  image-rendering: auto;
 }
 
 .memory-mask {
@@ -452,15 +494,58 @@ body {
 .floating-decor {
   position: fixed;
   inset: 0;
-  z-index: 1;
+  z-index: 3;
   pointer-events: none;
 }
 
 .floating-heart {
   position: absolute;
-  color: rgba(255, 196, 228, 0.55);
-  font-size: clamp(12px, 2vw, 24px);
+  color: rgba(255, 196, 228, 0.85);
+  font-size: clamp(20px, 4.5vw, 42px);
   animation: floatUp linear forwards;
+  text-shadow: 0 0 16px rgba(255, 120, 200, 0.75);
+}
+
+.memory-easter {
+  margin: 24px 0 160px;
+  padding-left: clamp(30px, 8vw, 74px);
+  opacity: 0;
+  transform: translateY(24px) scale(0.98);
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.memory-easter.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.memory-easter-inner {
+  padding: 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 207, 233, 0.34);
+  background: linear-gradient(140deg, rgba(255, 214, 240, 0.16), rgba(255, 221, 178, 0.12));
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+}
+
+.memory-easter-inner h3 {
+  margin: 0 0 8px;
+  color: #ffeaf8;
+}
+
+.memory-easter-inner p {
+  margin: 0 0 12px;
+  color: rgba(255, 236, 247, 0.9);
+}
+
+#easterBtn {
+  border: 0;
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-weight: 700;
+  color: #5a1b5d;
+  cursor: pointer;
+  background: linear-gradient(120deg, #ffd7ef, #ffc1e7);
+  box-shadow: 0 10px 24px rgba(255, 164, 221, 0.3);
 }
 
 .media-lightbox {
@@ -560,5 +645,32 @@ body {
   }
   100% {
     opacity: 0;
+  }
+}
+
+@keyframes gradientSweep {
+  0% {
+    transform: translateX(-12%) translateY(-6%);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translateX(4%) translateY(2%);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translateX(12%) translateY(6%);
+    opacity: 0.55;
+  }
+}
+
+@keyframes memoryGlowShift {
+  0%,
+  100% {
+    opacity: 0.78;
+    transform: scale(1) translate3d(0, 0, 0);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04) translate3d(0, -1.2%, 0);
   }
 }
