@@ -1,0 +1,62 @@
+{
+  "page": {
+    "heroTitle": "与你有关的浪漫，都在这里闪光",
+    "heroSubtitle": "记录我们一路走来的点点滴滴 · Love Story"
+  },
+  "bgm": "./assets/bgm.mp3",
+  "memoryBgm": "./assets/bgm-memory.mp3",
+  "backgroundVideo": "./assets/memories/video-bg.mp4",
+  "chapters": [
+    {
+      "time": "初遇 · 2023",
+      "title": "第一次心动，是你笑起来的时候",
+      "text": "那些看似平常的瞬间，后来都成了我反复珍藏的画面。",
+      "items": [
+        {
+          "type": "image",
+          "src": "./assets/memories/photo-1.jpg",
+          "title": "第一次一起散步的傍晚",
+          "desc": "把这张替换成你们的照片"
+        },
+        {
+          "type": "image",
+          "src": "./assets/memories/photo-2.jpg",
+          "title": "第一个有点害羞的合照",
+          "desc": "这里放你们早期的合影"
+        }
+      ]
+    },
+    {
+      "time": "靠近 · 2024",
+      "title": "日常里，慢慢长出浪漫",
+      "text": "一句晚安、一次拥抱、一段并肩前行，都是生活里最温柔的注脚。",
+      "items": [
+        {
+          "type": "video",
+          "src": "./assets/memories/video-1.mp4",
+          "title": "想反复回看的小片段",
+          "desc": "替换成你们的视频"
+        },
+        {
+          "type": "image",
+          "src": "./assets/memories/photo-4.jpg",
+          "title": "一起去看的那次日落",
+          "desc": "这里也可以继续加照片"
+        }
+      ]
+    },
+    {
+      "time": "相伴 · 2025",
+      "title": "谢谢你，把平凡变得闪闪发光",
+      "text": "每一次并肩，都在把未来写成更温柔的样子。",
+      "items": [
+        {
+          "type": "image",
+          "src": "./assets/memories/photo-3.jpg",
+          "title": "旅行里最喜欢的一帧",
+          "desc": "可继续添加更多图像和视频"
+        }
+      ]
+    }
+  ]
+}

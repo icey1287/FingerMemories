@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>新年手势烟花</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <audio id="bgm" loop preload="auto" src="./assets/bgm.mp3"></audio>
+
+    <div id="preloadOverlay" class="preload-overlay" aria-live="polite">
+      <div class="preload-card">
+        <h2>正在准备浪漫资源…</h2>
+        <p id="preloadText">初始化中</p>
+        <div class="preload-bar">
+          <span id="preloadFill"></span>
+        </div>
+        <p id="preloadPercent">0%</p>
+      </div>
+    </div>
+
+    <video id="video" playsinline muted></video>
+    <canvas id="scene"></canvas>
+
+    <div class="hud">
+      <h1>🎆 新年手势烟花</h1>
+      <p id="status">等待开启摄像头...</p>
+      <p class="tip">先伸手指，再靠近摩擦点燃，然后一起描出 2026</p>
+      <div class="actions">
+        <button id="startBtn">开启摄像头</button>
+        <button id="soundBtn" class="ghost">🔊 音效开</button>
+      </div>
+    </div>
+
+    <div id="letterOverlay" class="letter-overlay" aria-hidden="true">
+      <div class="letter-card">
+        <h2 id="letterTitle"></h2>
+        <div id="letterBody"></div>
+        <button id="closeLetterBtn"></button>
+      </div>
+    </div>
+
+    <section id="memoryPage" class="memory-page" aria-hidden="true">
+      <video id="memoryBgVideo" class="memory-bg-video" muted playsinline loop></video>
+      <div class="memory-bg-glow"></div>
+      <div class="memory-inner">
+        <header class="memory-hero">
+          <h2 id="artTitle" class="art-title">与你有关的浪漫，都在这里闪光</h2>
+          <p id="artSubtitle" class="art-subtitle">记录我们一路走来的点点滴滴 · Love Story</p>
+          <div class="memory-actions">
+            <button id="bgmControlBtn">⏸ 暂停 BGM</button>
+          </div>
+        </header>
+
+        <div id="timelineRoot" class="timeline-root"></div>
+      </div>
+      <div id="floatingDecor" class="floating-decor"></div>
+    </section>
+
+    <div id="mediaLightbox" class="media-lightbox" aria-hidden="true">
+      <div class="media-lightbox-panel">
+        <button id="closeLightboxBtn" class="lightbox-close">×</button>
+        <div id="lightboxContent" class="lightbox-content"></div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>
