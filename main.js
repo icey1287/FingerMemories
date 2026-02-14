@@ -30,12 +30,14 @@ const stages = {
   TRANSITION: 'transition',
   DRAW: 'draw',
   FIREWORKS: 'fireworks',
+  WISH: 'wish',
   LETTER: 'letter',
   MEMORY: 'memory',
 };
 
 const state = {
   stage: stages.DETECT,
+  ignited: false,
   tips: [],
   prevTips: new Map(),
   prevDistance: null,
@@ -55,11 +57,16 @@ const state = {
   transitionMessage: '',
   transitionOnFinish: null,
   transitionFxAcc: 0,
+  igniteHoldTimer: 0,
+  igniteHoldDuration: 1,
+  wishTimer: 0,
+  wishSpawnAcc: 0,
   memoryFloatAcc: 0,
 };
 
 const particles = [];
 const bursts = [];
+const meteors = [];
 
 const physics = {
   gravity: 720,
@@ -271,8 +278,8 @@ function playBoomSound() {
   playTone(rand(90, 130), 0.2, 'sawtooth', 0.04);
 }
 
-function addParticle(x, y, vx, vy, life, size, hueShift = 0) {
-  particles.push({ x, y, vx, vy, life, maxLife: life, size, hueShift, trail: [] });
+function addParticle(x, y, vx, vy, life, size, hueShift = 0, hot = false) {
+  particles.push({ x, y, vx, vy, life, maxLife: life, size, hueShift, hot, trail: [] });
 }
 
 function emitFingerAura(tip, energy = 1, warmHue = true) {
@@ -331,6 +338,59 @@ function emitBrushSpark(x, y) {
   }
 }
 
+function emitSparkCross(x, y, intensity = 0.6) {
+  const armCount = Math.random() < 0.5 ? 2 : 4;
+  const rot = rand(0, Math.PI * 0.5);
+  for (let i = 0; i < armCount; i += 1) {
+    const axis = rot + (Math.PI / armCount) * i;
+    for (const side of [-1, 1]) {
+      const angle = axis + (side < 0 ? Math.PI : 0) + rand(-0.08, 0.08);
+      const speed = rand(220, 520) * (0.75 + intensity * 0.55);
+      addParticle(
+        x + rand(-2, 2),
+        y + rand(-2, 2),
+        Math.cos(angle) * speed,
+        Math.sin(angle) * speed - rand(18, 72),
+        rand(0.28, 0.72),
+        rand(1.1, 2.5),
+        rand(38, 52),
+        true
+      );
+    }
+  }
+}
+
+function emitIgnitedSparkBurst(x, y, intensity = 0.6) {
+  const count = Math.floor(8 + intensity * 14);
+  for (let i = 0; i < count; i += 1) {
+    const a = rand(0, Math.PI * 2);
+    const speed = rand(150, 620 + intensity * 260);
+    addParticle(
+      x + rand(-4, 4),
+      y + rand(-4, 4),
+      Math.cos(a) * speed,
+      Math.sin(a) * speed - rand(20, 96),
+      rand(0.26, 0.85),
+      rand(1.1, 2.7),
+      rand(34, 52),
+      Math.random() < 0.38
+    );
+  }
+
+  if (Math.random() < 0.3 + intensity * 0.25) {
+    emitSparkCross(x + rand(-6, 6), y + rand(-6, 6), intensity);
+  }
+}
+
+function emitIgnitedHandSparks() {
+  if (!state.tips.length) return;
+
+  for (const tip of state.tips) {
+    emitIgnitedSparkBurst(tip.x, tip.y, 0.72);
+    if (Math.random() < 0.32) emitSparkCross(tip.x + rand(-8, 8), tip.y + rand(-8, 8), 0.65);
+  }
+}
+
 function emitTouchFireByTips(baseIntensity = 0.35) {
   if (state.tips.length < 2) return;
   const [a, b] = state.tips;
@@ -348,6 +408,21 @@ function launchBurst(x, y, scale = 1) {
     addParticle(x, y, Math.cos(a) * speed, Math.sin(a) * speed - rand(40, 190), rand(0.85, 1.7), rand(1.3, 3.8), rand(0, 45));
   }
   bursts.push({ x, y, age: 0, life: 0.4 + 0.15 * scale });
+}
+
+function spawnMeteor() {
+  const w = window.innerWidth;
+  const speed = rand(620, 980);
+  const angle = rand(0.56, 0.84);
+  meteors.push({
+    x: rand(-w * 0.18, w * 0.92),
+    y: rand(-180, -18),
+    vx: Math.cos(angle) * speed,
+    vy: Math.sin(angle) * speed,
+    life: rand(0.9, 1.45),
+    maxLife: 1.45,
+    size: rand(1.8, 3.8),
+  });
 }
 
 function addDigitBitmapCells(cells, ox, oy, unit, bitmap, digitTag) {
@@ -798,6 +873,7 @@ function startMemoryAmbientEffects() {
 
 async function enterMemoryPage() {
   state.stage = stages.MEMORY;
+  state.ignited = false;
   if (rafId) {
     cancelAnimationFrame(rafId);
     rafId = null;
@@ -805,6 +881,7 @@ async function enterMemoryPage() {
 
   particles.length = 0;
   bursts.length = 0;
+  meteors.length = 0;
   state.tips = [];
   state.prevTips.clear();
 
@@ -918,6 +995,7 @@ function updateDetectionAndIgnite(dt) {
     state.prevDistance = null;
     state.touchFrames = 0;
     state.pairStableFrames = 0;
+    state.igniteHoldTimer = 0;
     return;
   }
 
@@ -925,16 +1003,8 @@ function updateDetectionAndIgnite(dt) {
   const [a, b] = state.tips;
   const distance = Math.hypot(b.x - a.x, b.y - a.y);
 
-  const prevA = state.prevTips.get(a.id) || a;
-  const prevB = state.prevTips.get(b.id) || b;
-  const vax = (a.x - prevA.x) / dt;
-  const vay = (a.y - prevA.y) / dt;
-  const vbx = (b.x - prevB.x) / dt;
-  const vby = (b.y - prevB.y) / dt;
-
-  const relativeSpeed = Math.hypot(vax - vbx, vay - vby);
-  const distanceDiff = state.prevDistance == null ? 0 : Math.abs(distance - state.prevDistance) / dt;
   const stablePair = state.pairStableFrames > 8;
+  const closeEnoughToIgnite = stablePair && distance <= 74;
 
   if (distance >= 96) {
     const auraEnergy = clamp(1 - distance / 370, 0.2, 0.85);
@@ -945,18 +1015,15 @@ function updateDetectionAndIgnite(dt) {
     state.touchFrames += 1;
   }
 
-  const rubDistance = stablePair ? clamp(1 - distance / 96, 0, 1) : 0;
-  const rubVelocity = stablePair ? clamp(relativeSpeed / 900, 0, 1) : 0;
-  const squeeze = stablePair ? clamp(distanceDiff / 600, 0, 1) : 0;
-  const rubIntensity = rubDistance * (0.62 * rubVelocity + 0.38 * squeeze);
-
-  state.sparkHeat = clamp(state.sparkHeat * Math.pow(0.16, dt) + rubIntensity * 1.25, 0, 1.8);
-
-  if (stablePair && state.sparkHeat > 0.16 && rubIntensity > 0.05) {
-    emitFrictionSparks(a, b, clamp(state.sparkHeat, 0, 1));
+  if (closeEnoughToIgnite) {
+    state.igniteHoldTimer = clamp(state.igniteHoldTimer + dt, 0, state.igniteHoldDuration);
+  } else {
+    state.igniteHoldTimer = Math.max(0, state.igniteHoldTimer - dt * 0.85);
   }
 
-  if (stablePair && state.touchFrames > 14 && state.sparkHeat > 1.24 && Math.random() < 0.05) {
+  if (state.igniteHoldTimer >= state.igniteHoldDuration) {
+    state.igniteHoldTimer = 0;
+    state.ignited = true;
     launchBurst((a.x + b.x) * 0.5, (a.y + b.y) * 0.5 - 18, 0.8);
     playIgniteSound();
     playCheerSound();
@@ -974,28 +1041,26 @@ function updateDrawStage() {
     for (const tip of state.tips) emitFingerAura(tip, 0.35, true);
   }
 
-  if (state.tips.length < 2) return;
-  const [a, b] = state.tips;
-  const distance = Math.hypot(b.x - a.x, b.y - a.y);
-  if (distance > 130) return;
+  if (!state.tips.length) return;
 
-  emitTouchFireByTips(0.42);
-
-  const midX = (a.x + b.x) * 0.5;
-  const midY = (a.y + b.y) * 0.5;
-  state.drawTrail.push({ x: midX, y: midY });
-  if (state.drawTrail.length > 900) state.drawTrail.shift();
-  emitBrushSpark(midX, midY);
-  markGuideCoverage(midX, midY);
+  for (const tip of state.tips) {
+    state.drawTrail.push({ x: tip.x, y: tip.y });
+    if (state.drawTrail.length > 900) state.drawTrail.shift();
+    emitBrushSpark(tip.x, tip.y);
+    markGuideCoverage(tip.x, tip.y);
+  }
 
   const milestone = Math.floor(state.drawProgress * 4);
   if (milestone > state.progressMilestone) {
     state.progressMilestone = milestone;
-    launchBurst(midX, midY - 12, 0.72);
+    const anchor = state.tips[0];
+    emitIgnitedSparkBurst(anchor.x, anchor.y - 12, 0.8);
+    emitSparkCross(anchor.x, anchor.y - 8, 0.9);
     playTone(600 + milestone * 120, 0.09, 'triangle', 0.04);
   }
 
-  if (state.drawProgress >= 1) {
+  const enoughPainting = state.drawTrail.length >= 120;
+  if (state.drawProgress >= 1 && enoughPainting) {
     playCompleteSound();
     playCheerSound();
     startTransition(stages.FIREWORKS, 1.25, '2026 格子已全部点亮！准备全屏烟花庆祝', () => {
@@ -1016,14 +1081,59 @@ function updateFireworksStage(dt) {
     if (Math.random() < 0.35) playBoomSound();
   }
 
-  emitTouchFireByTips(0.34);
-
   if (state.fireworksTimer > 6.4) {
     playCompleteSound();
-    startTransition(stages.LETTER, 1, '烟花谢幕后，信件正在送达...', () => {
+    startTransition(stages.WISH, 1.1, '烟花渐息，流星雨正在降临...', () => {
+      state.wishTimer = 0;
+      state.wishSpawnAcc = 0;
+      meteors.length = 0;
+      for (let i = 0; i < 8; i += 1) spawnMeteor();
+      playCheerSound();
+    });
+  }
+}
+
+function updateWishStage(dt) {
+  state.wishTimer += dt;
+  state.wishSpawnAcc += dt;
+
+  while (state.wishSpawnAcc > 0.05) {
+    state.wishSpawnAcc -= 0.05;
+    spawnMeteor();
+    if (Math.random() < 0.2) spawnMeteor();
+  }
+
+  if (state.wishTimer > 5.8) {
+    playCompleteSound();
+    startTransition(stages.LETTER, 1.05, '许下愿望后，信件缓缓降临...', () => {
       letterOverlay.classList.add('show');
       letterOverlay.setAttribute('aria-hidden', 'false');
     });
+  }
+}
+
+function updateMeteors(dt) {
+  for (let i = meteors.length - 1; i >= 0; i -= 1) {
+    const m = meteors[i];
+    m.x += m.vx * dt;
+    m.y += m.vy * dt;
+    m.life -= dt;
+
+    if (Math.random() < 0.88) {
+      addParticle(
+        m.x + rand(-3, 3),
+        m.y + rand(-3, 3),
+        -m.vx * rand(0.03, 0.08),
+        -m.vy * rand(0.03, 0.08),
+        rand(0.16, 0.34),
+        rand(0.8, 1.8),
+        rand(180, 240)
+      );
+    }
+
+    if (m.life <= 0 || m.x > window.innerWidth + 220 || m.y > window.innerHeight + 220) {
+      meteors.splice(i, 1);
+    }
   }
 }
 
@@ -1077,6 +1187,37 @@ function drawBursts() {
   }
 }
 
+function drawMeteors() {
+  if (!meteors.length) return;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  for (const m of meteors) {
+    const lifeT = clamp(m.life / m.maxLife, 0, 1);
+    const tail = 70 + (1 - lifeT) * 40;
+    const len = Math.hypot(m.vx, m.vy) || 1;
+    const tx = (m.vx / len) * tail;
+    const ty = (m.vy / len) * tail;
+    const g = ctx.createLinearGradient(m.x, m.y, m.x - tx, m.y - ty);
+    g.addColorStop(0, `rgba(255, 250, 220, ${0.95 * lifeT + 0.05})`);
+    g.addColorStop(0.35, `rgba(185, 222, 255, ${0.7 * lifeT + 0.08})`);
+    g.addColorStop(1, 'rgba(120, 186, 255, 0)');
+
+    ctx.strokeStyle = g;
+    ctx.lineWidth = m.size;
+    ctx.beginPath();
+    ctx.moveTo(m.x, m.y);
+    ctx.lineTo(m.x - tx, m.y - ty);
+    ctx.stroke();
+
+    ctx.fillStyle = `rgba(255, 252, 236, ${0.85 * lifeT + 0.1})`;
+    ctx.beginPath();
+    ctx.arc(m.x, m.y, m.size * 0.75, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
 function drawParticles() {
   for (const p of particles) {
     const t = clamp(p.life / p.maxLife, 0, 1);
@@ -1084,7 +1225,11 @@ function drawParticles() {
       const a = p.trail[i - 1];
       const b = p.trail[i];
       const segT = i / p.trail.length;
-      ctx.strokeStyle = `hsla(${p.hueShift}, 100%, 68%, ${t * segT * 0.46})`;
+      if (p.hot) {
+        ctx.strokeStyle = `rgba(255, 245, 216, ${t * segT * 0.62})`;
+      } else {
+        ctx.strokeStyle = `hsla(${p.hueShift}, 100%, 68%, ${t * segT * 0.46})`;
+      }
       ctx.lineWidth = p.size * segT;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
@@ -1092,7 +1237,11 @@ function drawParticles() {
       ctx.stroke();
     }
 
-    ctx.fillStyle = `hsla(${p.hueShift}, 100%, ${52 + t * 30}%, ${0.14 + t * 0.95})`;
+    if (p.hot) {
+      ctx.fillStyle = `rgba(255, 252, 235, ${0.2 + t * 0.95})`;
+    } else {
+      ctx.fillStyle = `hsla(${p.hueShift}, 100%, ${52 + t * 30}%, ${0.14 + t * 0.95})`;
+    }
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.size * (0.45 + t * 0.85), 0, Math.PI * 2);
     ctx.fill();
@@ -1106,6 +1255,39 @@ function drawFingerHints() {
     ctx.arc(tip.x, tip.y, 4.8, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  if (state.stage !== stages.DETECT || state.tips.length < 2) return;
+  const [a, b] = state.tips;
+  const d = Math.hypot(b.x - a.x, b.y - a.y);
+  if (d > 88 && state.igniteHoldTimer <= 0.001) return;
+
+  const progress = clamp(state.igniteHoldTimer / state.igniteHoldDuration, 0, 1);
+  const midX = (a.x + b.x) * 0.5;
+  const midY = (a.y + b.y) * 0.5 - 16;
+  const barW = clamp(72 + (88 - Math.min(d, 88)) * 0.6, 72, 112);
+  const barH = 8;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(16, 8, 24, 0.68)';
+  ctx.beginPath();
+  ctx.roundRect(midX - barW * 0.5, midY - barH * 0.5, barW, barH, 999);
+  ctx.fill();
+
+  const g = ctx.createLinearGradient(midX - barW * 0.5, midY, midX + barW * 0.5, midY);
+  g.addColorStop(0, '#ffd36f');
+  g.addColorStop(0.55, '#ff8e4d');
+  g.addColorStop(1, '#ff4d3a');
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.roundRect(midX - barW * 0.5, midY - barH * 0.5, barW * progress, barH, 999);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255, 228, 164, 0.78)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(midX - barW * 0.5, midY - barH * 0.5, barW, barH, 999);
+  ctx.stroke();
+  ctx.restore();
 }
 
 function drawGuideAndTrail() {
@@ -1155,6 +1337,10 @@ function updateStatusText() {
     statusEl.textContent = '太棒了！全屏烟花庆祝中...';
     return;
   }
+  if (state.stage === stages.WISH) {
+    statusEl.textContent = '流星雨来啦 ✨ 快许下新年愿望';
+    return;
+  }
   if (state.stage === stages.LETTER) {
     statusEl.textContent = '新年信件已送达 💌';
     return;
@@ -1174,11 +1360,12 @@ function updateStatusText() {
     if (state.pairStableFrames <= 8) {
       statusEl.textContent = '检测双食指中，请保持手部稳定';
     } else if (distance >= 110) {
-      statusEl.textContent = '第2步：请慢慢把两只食指靠近';
-    } else if (state.sparkHeat < 0.16) {
-      statusEl.textContent = '第3步：已靠近，来回摩擦即可点燃';
+      statusEl.textContent = '第2步：请慢慢把两只食指靠近并贴合';
+    } else if (distance <= 74) {
+      const holdProgress = Math.round(clamp(state.igniteHoldTimer / state.igniteHoldDuration, 0, 1) * 100);
+      statusEl.textContent = `第3步：保持贴合点燃中 ${holdProgress}%`;
     } else {
-      statusEl.textContent = '燃烧中：继续摩擦，马上进入 2026 涂格子';
+      statusEl.textContent = '第3步：继续贴近，保持 1 秒即可点燃';
     }
   }
 }
@@ -1193,6 +1380,7 @@ function animate(now) {
   if (state.stage === stages.TRANSITION) updateTransition(dt);
   if (state.stage === stages.DRAW) updateDrawStage();
   if (state.stage === stages.FIREWORKS) updateFireworksStage(dt);
+  if (state.stage === stages.WISH) updateWishStage(dt);
   if (state.stage === stages.MEMORY) {
     state.memoryFloatAcc += dt;
     while (state.memoryFloatAcc > 0.35) {
@@ -1201,8 +1389,14 @@ function animate(now) {
     }
   }
 
+  if (state.ignited && state.stage !== stages.MEMORY) {
+    emitIgnitedHandSparks();
+  }
+
+  updateMeteors(dt);
   updateParticles(dt);
   drawBursts();
+  drawMeteors();
   drawParticles();
   drawGuideAndTrail();
   drawFingerHints();
@@ -1269,6 +1463,7 @@ async function start() {
     return;
   }
 
+  state.ignited = false;
   startBtn.disabled = true;
   startBtn.textContent = '启动中...';
   ensureAudioContext();
@@ -1279,7 +1474,7 @@ async function start() {
 
   try {
     await initCameraAndHands();
-    statusEl.textContent = '摄像头已开启：先伸手指，再靠近摩擦';
+    statusEl.textContent = '摄像头已开启：先伸手指，再靠近并贴合 1 秒';
     startBtn.remove();
   } catch (err) {
     statusEl.textContent = `启动失败：${err.message || err}`;
